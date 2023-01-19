@@ -1,4 +1,3 @@
-#Cem Gulboy, Hasan Bagci, Elif Fer, Iris Sirin
 #Client Side
 
 from tkinter import *
