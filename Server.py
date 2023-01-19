@@ -1,6 +1,3 @@
-#Cem Gulboy, Hasan Bagci, Elif Fer, Iris Sirin
-#Server Side
-
 from tkinter import *
 from socket import *
 from threading import *
