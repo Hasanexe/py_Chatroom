@@ -4,11 +4,16 @@
 from tkinter import *
 from socket import *
 from threading import *
-sock = socket(AF_INET,SOCK_STREAM)
+sock = None
+connected = False
 
 
 def receive():
+    global connected
+    global sock
     while True:
+        if connected == False:
+            break
         try:
             msg = sock.recv(1024).decode("utf-8")
             listbox1.insert(END,msg)
@@ -16,44 +21,81 @@ def receive():
         except ConnectionAbortedError:
             listbox1.insert(END,"Connection Aborted")
             sock.close()
+            connected = False
             break
         except:
-            listbox1.insert(END,"Unexpected Error")
+            listbox1.insert(END,"Server Disconnected")
             listbox1.yview(END)
             sock.close()
+            connected = False
+            button1['state'] = NORMAL
+            button2['state'] = DISABLED
+            button3['state'] = DISABLED
             break
         if not msg:
             listbox1.insert(END,"Server Disconnected")
             sock.close()
+            connected = False
+            button1['state'] = NORMAL
+            button2['state'] = DISABLED
+            button3['state'] = DISABLED
             break
 
 def connect(event=NONE):
-    sock.connect((textIP.get(),int(textPort.get())))
-    button1['state'] = DISABLED
-    button2['state'] = NORMAL
-    button3['state'] = NORMAL
-    #msg = sock.recv(1024).decode("utf-8")
-    sock.send(bytes(textUsername.get(),"utf-8"))
-    t = Thread(target=receive)
-    t.start()
+    global connected
+    global sock
+    if connected == False:
+        try:
+            sock = socket(AF_INET,SOCK_STREAM)
+            sock.connect((textIP.get(),int(textPort.get())))
+            sock.send(bytes(textUsername.get()+"|<<>>|"+textPassword.get(),"utf-8"))
+            msg = sock.recv(1024).decode("utf-8")
+            if msg == "srvcon":
+                listbox1.insert(END,"Login Successful")
+                listbox1.yview(END)
+                connected = True
+                button1['state'] = DISABLED
+                button2['state'] = NORMAL
+                button3['state'] = NORMAL
+                t = Thread(target=receive)
+                t.start()
+            else:
+                listbox1.insert(END,msg)
+                listbox1.yview(END)
+                sock.close()
+        except:
+            listbox1.insert(END,"Couldn't Connect, Make sure server is up,")
+            listbox1.yview(END)        
+    
 
 def disconnect(event=NONE):
-    sock.close()
-    button1['state'] = NORMAL
-    button2['state'] = DISABLED
-    button3['state'] = DISABLED
+    global connected
+    global sock
+    if connected:
+        sock.close()
+        connected = False
+        button1['state'] = NORMAL
+        button2['state'] = DISABLED
+        button3['state'] = DISABLED
 
 def sendMessage(event=NONE):
-    sock.send(bytes(textbox5.get(),"utf-8"))
-    listbox1.insert(END,"You: "+textbox5.get())
-    listbox1.yview(END)
-    textMsg.set("")
+    global connected
+    if connected:
+        global sock
+        sock.send(bytes(textbox5.get(),"utf-8"))
+        listbox1.insert(END,"You: "+textbox5.get())
+        listbox1.yview(END)
+        textMsg.set("")
 
 def clearTB(event):
     textMsg.set("")
 
 def quitt():
-    sock.close()
+    global connected
+    global sock
+    if connected:
+        sock.close()
+        connected = False
     masterClient.destroy()
 
 
