@@ -1,11 +1,7 @@
-#Cem Gulboy, Hasan Bagci, Elif Fer, Iris Sirin
-#Server Side
-
-from Crypto.Hash import SHA256
 from tkinter import *
 from socket import *
 from threading import *
-sock = None
+sock = socket(AF_INET,SOCK_STREAM)
 clients = []
 nicknames = []
 
@@ -32,27 +28,9 @@ def listen (connection,address,nickname):
             break
         if not msg:
             break
-
-def login(name,password):
-    users = []
-    file = open("users.txt", "r")
-    for line in file:
-        line = line.strip()
-        salt = line.split("\t")[1]
-        hashedPass = line.split("\t")[2]
-        if line.split("\t")[0].lower() == name:
-            if hashedPass == SHA256.new((password+salt).encode("utf-8")).hexdigest():
-                file.close()
-                return 0
-            else:
-                file.close()
-                return 2
-    file.close()
-    return 1
+    
 
 def connect ():
-    global sock
-    sock = socket(AF_INET,SOCK_STREAM)
     sock.bind(("localhost",int(textPort.get())))
     sock.listen(5)
     listbox1.insert(END,"Server has started on port: "+textPort.get())
@@ -61,32 +39,18 @@ def connect ():
         connection,address = sock.accept()
 ##        listbox1.insert(END,"Connection from ", address)
 ##        listbox1.yview(END)
-##        connection.send("nick".encode('utf-8'))
-        credentials = connection.recv(1024).decode("utf-8")
-        nickname,password = credentials.split("|<<>>|")
-        checkLogin = login(nickname.lower(),password)
-        if checkLogin != 1:
-            if checkLogin == 0:
-                connection.send("srvcon".encode('utf-8'))
-                nicknames.append(nickname)
-                clients.append(connection)
-                listbox1.insert(END,nickname + " Connected")
-                listbox1.yview(END)
-                broadcast(nickname+" Connected",connection)
-                t = Thread(target=listen,args=(connection,address,nickname))
-                t.start()
-            else:
-                connection.send("Password incorrect".encode('utf-8'))
-                listbox1.insert(END,nickname + " login attempt failed")
-                listbox1.yview(END)
-                connection.close()
-        else:
-            connection.send("User Not Found".encode('utf-8'))
-            listbox1.insert(END,"Someone tried login with following name: "+nickname)
-            listbox1.yview(END)
-            connection.close()
-                
-    sock.close()
+        #connection.send("nick".encode('utf-8'))
+        nickname = connection.recv(1024).decode("utf-8")
+        nicknames.append(nickname)
+        clients.append(connection)
+        listbox1.insert(END,nickname + " Connected")
+        listbox1.yview(END)
+        #broadcast(nickname+" Connected")
+        connection.send("You are connected".encode('utf-8'))
+        
+        t = Thread(target=listen,args=(connection,address,nickname))
+        t.start()
+    #sock.close()
 
 def startListening(event=NONE):
     if len(textPort.get())!=0 and textPort.get().isnumeric():
@@ -96,9 +60,6 @@ def startListening(event=NONE):
         t.start()
 
 def stopListening(event=NONE):
-    global sock
-    for client in clients:
-            client.close()
     sock.close()
     listbox1.insert(END,"Server has stopped listening.")
     listbox1.yview(END)
@@ -107,13 +68,6 @@ def stopListening(event=NONE):
 
 def clearTB(event):
     textMsg.set("")
-
-def quitt():
-    global sock
-    for client in clients:
-        client.close()
-    sock.close()
-    master.destroy()
 
 master = Tk()
 master.title("Server Application")
@@ -160,5 +114,4 @@ button1.pack(side=TOP, pady=10)
 button2 = Button(frameButton,text='Stop Listening', command=stopListening, state = DISABLED)
 button2.pack(side=LEFT)
 
-master.protocol('WM_DELETE_WINDOW', quitt)
 mainloop()
