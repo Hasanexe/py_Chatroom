@@ -18,16 +18,26 @@ import time
 sock = None
 clients = []
 nicknames = []
+keys = {}
+ivs = {}
+ciphers = {}
 
 def broadcast(msg,sender):
     for client in clients:
         if client != sender:
-            client.send(msg.encode('utf-8'))
+        #cipher1 = AES.new(keys[client], AES.MODE_CBC, ivs[client])
+            data = enc(msg,ciphers[client])
+            listbox1.insert(END,'msg:' + str(data))
+            client.sendall(data)
 
-def listen (connection,address,nickname,K_aes,K_hmac,iv):
+def listen (connection,address,nickname,cipher):
     while True:
-        try:            
-            msg = connection.recv(1024).decode("utf-8")
+        try:
+            msg = connection.recv(1024)
+            listbox1.insert(END,'msg:' + str(msg))
+            listbox1.yview(END)
+            msg = dec(msg,cipher)
+            #msg = connection.recv(1024).decode("utf-8")
             msg = nickname + ": " + msg
             listbox1.insert(END,msg)
             listbox1.yview(END)
@@ -62,7 +72,20 @@ def login(name,password):
     file.close()
     return 1
 
+def enc(msg,cipher):
+    data = bytes(msg+"|<<>>|"+'dummy',"utf-8")
+    data = pad(data, AES.block_size)
+    data = cipher.encrypt(data)
+    return data
+
+def dec(msg,cipher):
+    data = cipher.decrypt(msg)  
+    data = data.decode("utf-8",'ignore')
+    data,dummy = data.split("|<<>>|")
+    return data
+
 def connect ():
+    global keys_cipher
     global sock
     sock = socket(AF_INET,SOCK_STREAM)
     sock.bind(("localhost",int(textPort.get())))
@@ -101,8 +124,10 @@ def connect ():
         iv = connection.recv(1024)
 
         key = bytes(K_aes[0:32], "utf-8")
+        print(str(key))
+        print(str(iv))
         cipher = AES.new(key, AES.MODE_CBC, iv)
-
+        print(str(cipher))
         
         listbox1.insert(END,"AES Key Created: "+str(K_aes))
         listbox1.yview(END)
@@ -122,10 +147,13 @@ def connect ():
             connection.send("srvcon".encode('utf-8'))
             nicknames.append(nickname)
             clients.append(connection)
+##            keys[connection] = key
+##            ivs[connection] = iv
+            ciphers[connection] = AES.new(key, AES.MODE_CBC, iv)
             listbox1.insert(END,nickname + " Connected")
             listbox1.yview(END)
             broadcast(nickname+" Connected",connection)
-            t = Thread(target=listen,args=(connection,address,nickname,K_aes,K_hmac,iv))
+            t = Thread(target=listen,args=(connection,address,nickname,cipher))
             t.start()
         elif checkLogin == 2:
             connection.send("Password incorrect".encode('utf-8'))

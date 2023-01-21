@@ -16,6 +16,7 @@ from threading import *
 import time
 import random
 
+cipher_global = None
 sock = None
 connected = False
 
@@ -23,14 +24,20 @@ connected = False
 ##K = SHA3_256.new(KAB1.x.to_bytes((KAB1.x.bit_length() + 7) // 8, byteorder='big')+b'TOP SECRET')
 
 
-def receive():
+def receive(key,iv):
+    cipher1 = AES.new(key, AES.MODE_CBC, iv)
     global connected
     global sock
     while True:
         if connected == False:
             break
         try:
-            msg = sock.recv(1024).decode("utf-8")
+            #msg = sock.recv(1024).decode("utf-8")
+            
+            msg = sock.recv(1024)
+            listbox1.insert(END,str(msg))
+            listbox1.yview(END)
+            msg = dec(msg,cipher1)
             listbox1.insert(END,msg)
             listbox1.yview(END)
         except ConnectionAbortedError:
@@ -56,11 +63,27 @@ def receive():
             button3['state'] = DISABLED
             break
 
+def enc(msg,cipher):
+    data = bytes(msg+"|<<>>|"+'dummy',"utf-8")
+    data = pad(data, AES.block_size)
+    data = cipher.encrypt(data)
+    return data
+
+def dec(msg,cipher):
+    data = cipher.decrypt(msg)
+    #data = unicode(data, errors='ignore')
+    data = data.decode("utf-8",'ignore')
+    print(data)
+    data,dummy = data.split("|<<>>|")
+    return data
+
+
 def connect(event=NONE):
+    global cipher_global
     global connected
     global sock
     if connected == False:
-##        try:
+        try:
             sock = socket(AF_INET,SOCK_STREAM)
             sock.connect((textIP.get(),int(textPort.get())))
 
@@ -77,7 +100,7 @@ def connect(event=NONE):
             
             sock.sendall(bytes(str(pA.x)+"|<<>>|"+str(pA.y),"utf-8")) #Send Public A 
 
-            pB = sock.recv(4096).decode("utf-8") #Receive Public B
+            pB = sock.recv(1024).decode("utf-8") #Receive Public B
                                
             x,y = pB.split("|<<>>|")
             pB = Point(int(x), int(y),E) #Merge Public B
@@ -94,8 +117,9 @@ def connect(event=NONE):
 
             
             cipher = AES.new(key, AES.MODE_CBC, iv)
+            cipher_global = cipher
             
-            data = bytes(textUsername.get()+"|<<>>|"+textPassword.get()+"|<<>>|"+'hghg',"utf-8")
+            data = bytes(textUsername.get()+"|<<>>|"+textPassword.get()+"|<<>>|"+'dummy',"utf-8")
             data = pad(data, AES.block_size)
             data = cipher.encrypt(data)
             sock.send(data)
@@ -115,15 +139,15 @@ def connect(event=NONE):
                 button1['state'] = DISABLED
                 button2['state'] = NORMAL
                 button3['state'] = NORMAL
-                t = Thread(target=receive)
+                t = Thread(target=receive,args=(key,iv))
                 t.start()
             else:
                 listbox1.insert(END,msg)
                 listbox1.yview(END)
                 sock.close()
-##        except:
-##            listbox1.insert(END,"Couldn't Connect, Make sure server is up,")
-##            listbox1.yview(END)        
+        except:
+            listbox1.insert(END,"Couldn't Connect, Make sure server is up,")
+            listbox1.yview(END)        
     
 
 def disconnect(event=NONE):
@@ -137,18 +161,15 @@ def disconnect(event=NONE):
         button3['state'] = DISABLED
 
 def sendMessage(event=NONE):
+    global cipher_global
     global connected
     if connected:
         global sock
-        sock.send(bytes(textbox5.get(),"utf-8"))
+        data = enc(textbox5.get(),cipher_global)
+        sock.sendall(data)
         listbox1.insert(END,"You: "+textbox5.get())
         listbox1.yview(END)
         textMsg.set("")
-##        data = bytes(textbox5.get()+"|<<>>|"+'hghg',"utf-8")
-##        data = pad(data, AES.block_size)
-##        data = cipher.encrypt(data)
-##        sock.sendall(data)
-
 
 def clearTB(event):
     textMsg.set("")
