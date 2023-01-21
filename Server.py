@@ -1,10 +1,20 @@
 #Cem Gulboy, Hasan Bagci, Elif Fer, Iris Sirin
 #Server Side
 
+from ecpy.curves   import Curve, Point
+from ecpy.keys     import ECPublicKey, ECPrivateKey
+from Crypto import Random
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Random import get_random_bytes
 from Crypto.Hash import SHA256
+from Crypto.Hash import SHA3_256
+from Crypto.Hash import HMAC
 from tkinter import *
 from socket import *
 from threading import *
+import random
+import time
 sock = None
 clients = []
 nicknames = []
@@ -14,9 +24,9 @@ def broadcast(msg,sender):
         if client != sender:
             client.send(msg.encode('utf-8'))
 
-def listen (connection,address,nickname):
+def listen (connection,address,nickname,K_aes,K_hmac,iv):
     while True:
-        try:
+        try:            
             msg = connection.recv(1024).decode("utf-8")
             msg = nickname + ": " + msg
             listbox1.insert(END,msg)
@@ -40,6 +50,8 @@ def login(name,password):
         line = line.strip()
         salt = line.split("\t")[1]
         hashedPass = line.split("\t")[2]
+        if name in nicknames:
+            return 3
         if line.split("\t")[0].lower() == name:
             if hashedPass == SHA256.new((password+salt).encode("utf-8")).hexdigest():
                 file.close()
@@ -62,29 +74,74 @@ def connect ():
 ##        listbox1.insert(END,"Connection from ", address)
 ##        listbox1.yview(END)
 ##        connection.send("nick".encode('utf-8'))
-        credentials = connection.recv(1024).decode("utf-8")
-        nickname,password = credentials.split("|<<>>|")
+        
+        E = Curve.get_curve('secp256k1')# Pick Eliptic Curve
+        n = E.order                     #Pick Group
+        P = E.generator                 #Pick Generator
+        sB = random.randint(2, n-1)     #Create Secret For Server(B) (Random num from group)
+        pB = sB * P                     #Create Public for Server(B)
+
+        
+        pA = connection.recv(2048).decode("utf-8") #Receive Public A
+        x,y = pA.split("|<<>>|")
+        pA = Point(int(x), int(y),E)        #Merge Public A
+
+        
+        data = str(pB.x)+"|<<>>|"+str(pB.y)
+        connection.sendall(data.encode('utf-8')) #Send Public B
+        
+        KAB = sB * pA               #Calculate Shared KEY
+        #K = SHA3_256.new(KAB.x.to_bytes((KAB.x.bit_length() + 7) // 8, byteorder='big')+b'TOP SECRET')
+
+        K_aes = SHA3_256.new((str(KAB.x)+'TOP SECRET'+str(KAB.y)).encode("utf-8")).hexdigest()
+        K_hmac = SHA3_256.new((str(KAB.y)+'HMAAACCCC'+str(KAB.x)).encode("utf-8")).hexdigest()
+
+
+        ## ------------------Begin AES
+        iv = connection.recv(1024)
+
+        key = bytes(K_aes[0:32], "utf-8")
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+
+        
+        listbox1.insert(END,"AES Key Created: "+str(K_aes))
+        listbox1.yview(END)
+        listbox1.insert(END,"HMAC Key Created: "+str(K_hmac))
+        listbox1.yview(END)
+
+        
+        data = connection.recv(1024)
+        listbox1.insert(END,"Credentials Received(Encrypted): "+str(data))
+        listbox1.yview(END)
+        data = cipher.decrypt(data)
+        credentials = data.decode("utf-8")
+        ##print("decmsg = ", unpad(decmsg, AES.block_size))
+        nickname,password,dummy = credentials.split("|<<>>|")
         checkLogin = login(nickname.lower(),password)
-        if checkLogin != 1:
-            if checkLogin == 0:
-                connection.send("srvcon".encode('utf-8'))
-                nicknames.append(nickname)
-                clients.append(connection)
-                listbox1.insert(END,nickname + " Connected")
-                listbox1.yview(END)
-                broadcast(nickname+" Connected",connection)
-                t = Thread(target=listen,args=(connection,address,nickname))
-                t.start()
-            else:
-                connection.send("Password incorrect".encode('utf-8'))
-                listbox1.insert(END,nickname + " login attempt failed")
-                listbox1.yview(END)
-                connection.close()
-        else:
+        if checkLogin == 0:
+            connection.send("srvcon".encode('utf-8'))
+            nicknames.append(nickname)
+            clients.append(connection)
+            listbox1.insert(END,nickname + " Connected")
+            listbox1.yview(END)
+            broadcast(nickname+" Connected",connection)
+            t = Thread(target=listen,args=(connection,address,nickname,K_aes,K_hmac,iv))
+            t.start()
+        elif checkLogin == 2:
+            connection.send("Password incorrect".encode('utf-8'))
+            listbox1.insert(END,nickname + " login attempt failed")
+            listbox1.yview(END)
+            connection.close()
+        elif checkLogin == 1:
             connection.send("User Not Found".encode('utf-8'))
             listbox1.insert(END,"Someone tried login with following name: "+nickname)
             listbox1.yview(END)
             connection.close()
+        elif checkLogin == 3:
+            connection.send("User Already Connected".encode('utf-8'))
+            listbox1.insert(END,nickname + " Tried to connect again and blocked")
+            listbox1.yview(END)
+            connection.close()           
                 
     sock.close()
 
@@ -112,7 +169,7 @@ def quitt():
     global sock
     for client in clients:
         client.close()
-    sock.close()
+    #sock.close()
     master.destroy()
 
 master = Tk()

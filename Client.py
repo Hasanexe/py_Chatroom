@@ -1,4 +1,4 @@
-#Cem Gulboy, Hasan Bagci, Elif Fer, Iris Sirin yyyyyyyyyyyyyyyy
+#Cem Gulboy, Hasan Bagci, Elif Fer, Iris Sirin
 #Client Side
 
 from ecpy.curves   import Curve, Point
@@ -13,58 +13,15 @@ from Crypto.Hash import HMAC
 from tkinter import *
 from socket import *
 from threading import *
+import time
 import random
+
 sock = None
 connected = False
 
-##hmac_key = bytes("pass", "utf-8")
-##message = bytes("Elif", "utf-8")
-##hmac = HMAC.new(hmac_key, message, SHA256)
-##print(hmac.hexdigest())
-
 #----------------------------------------------
-
-
-
-##iv = get_random_bytes(AES.block_size)
-##key = get_random_bytes(AES.block_size)
-##
-##cipher = AES.new(key, AES.MODE_CBC, iv)
-##
-##message = bytes("Hello World!", "utf-8")
-##msg = pad(message, AES.block_size)
-##encmsg = cipher.encrypt(msg)
-##
-##print("message = ", message)
-##print("msg = ", msg)
-##print("encmsg = ", encmsg)
-##
-##cipher2 = AES.new(key, AES.MODE_CBC, iv)
-##decmsg = cipher2.decrypt(encmsg)
-##
-##print("decmsg = ", decmsg)
-##print("decmsg = ", unpad(decmsg, AES.block_size))
-
-##E = Curve.get_curve('secp256k1')
-##n = E.order
-##P = E.generator
-##sA = random.randint(2, n-1)
-##pA = sA * P
-##
-##sB = random.randint(2, n-1)
-##print("sB:", sB)
-##
-##pB = sB * P
-##print("QB:", pB)
-##
-##KAB1 = sA * pB
-##print("KAB1:", KAB1)
-##
-##KAB2 = sB * pA
-##print("KAB2:", KAB2)
-##
 ##K = SHA3_256.new(KAB1.x.to_bytes((KAB1.x.bit_length() + 7) // 8, byteorder='big')+b'TOP SECRET')
-##print("K: ", K.hexdigest())
+
 
 def receive():
     global connected
@@ -103,11 +60,53 @@ def connect(event=NONE):
     global connected
     global sock
     if connected == False:
-        try:
+##        try:
             sock = socket(AF_INET,SOCK_STREAM)
             sock.connect((textIP.get(),int(textPort.get())))
+
+
+            iv = get_random_bytes(AES.block_size) #Initialization Vector
             
-            sock.send(bytes(textUsername.get()+"|<<>>|"+textPassword.get(),"utf-8"))
+            E = Curve.get_curve('secp256k1')# Pick Eliptic Curve
+            n = E.order                     #Pick Group
+            P = E.generator                 #Pick Generator
+            sA = random.randint(2, n-1)     #Create Secret For Client(A) (Random num from group)
+            pA = sA * P                     #Create Public for client(A)
+
+            
+            
+            sock.sendall(bytes(str(pA.x)+"|<<>>|"+str(pA.y),"utf-8")) #Send Public A 
+
+            pB = sock.recv(4096).decode("utf-8") #Receive Public B
+                               
+            x,y = pB.split("|<<>>|")
+            pB = Point(int(x), int(y),E) #Merge Public B
+            
+            KAB = sA * pB               #Calculate Shared KEY
+
+            K_aes = SHA3_256.new((str(KAB.x)+'TOP SECRET'+str(KAB.y)).encode("utf-8")).hexdigest()
+            K_hmac = SHA3_256.new((str(KAB.y)+'HMAAACCCC'+str(KAB.x)).encode("utf-8")).hexdigest()
+            
+            ## ------------------Begin AES
+            sock.sendall(iv)
+            key = bytes(K_aes[0:32], "utf-8")
+
+
+            
+            cipher = AES.new(key, AES.MODE_CBC, iv)
+            
+            data = bytes(textUsername.get()+"|<<>>|"+textPassword.get()+"|<<>>|"+'hghg',"utf-8")
+            data = pad(data, AES.block_size)
+            data = cipher.encrypt(data)
+            sock.send(data)
+##
+##            hmac_key = bytes("pass", "utf-8")
+##            message = bytes("Elif", "utf-8")
+##            hmac = HMAC.new(K_hmac, message, SHA256)
+##            print(hmac.hexdigest())
+
+            
+            
             msg = sock.recv(1024).decode("utf-8")
             if msg == "srvcon":
                 listbox1.insert(END,"Login Successful")
@@ -122,9 +121,9 @@ def connect(event=NONE):
                 listbox1.insert(END,msg)
                 listbox1.yview(END)
                 sock.close()
-        except:
-            listbox1.insert(END,"Couldn't Connect, Make sure server is up,")
-            listbox1.yview(END)        
+##        except:
+##            listbox1.insert(END,"Couldn't Connect, Make sure server is up,")
+##            listbox1.yview(END)        
     
 
 def disconnect(event=NONE):
@@ -145,6 +144,11 @@ def sendMessage(event=NONE):
         listbox1.insert(END,"You: "+textbox5.get())
         listbox1.yview(END)
         textMsg.set("")
+##        data = bytes(textbox5.get()+"|<<>>|"+'hghg',"utf-8")
+##        data = pad(data, AES.block_size)
+##        data = cipher.encrypt(data)
+##        sock.sendall(data)
+
 
 def clearTB(event):
     textMsg.set("")
