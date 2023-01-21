@@ -35,8 +35,6 @@ def receive(key,iv):
             #msg = sock.recv(1024).decode("utf-8")
             
             msg = sock.recv(1024)
-            listbox1.insert(END,str(msg))
-            listbox1.yview(END)
             msg = dec(msg,cipher1)
             listbox1.insert(END,msg)
             listbox1.yview(END)
